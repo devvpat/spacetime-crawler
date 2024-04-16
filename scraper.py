@@ -1,7 +1,14 @@
 import re
 from urllib.parse import urlparse
+import utils.response
 
-def scraper(url, resp):
+def scraper(url: str, resp: utils.response.Response) -> list:
+    # This function needs to return a list of urls that are scraped from the response.
+    # An empty list for responses that are empty. 
+    # These urls will be added to the Frontier and retrieved from the cache.
+    # These urls have to be filtered so that urls that do not have to be downloaded are not added to the frontier.
+    # The first step of filtering the urls can be by using the is_valid function provided in the same scraper.py file. 
+    # Additional rules should be added to the is_valid function to filter the urls.
     links = extract_next_links(url, resp)
     return [link for link in links if is_valid(link)]
 
