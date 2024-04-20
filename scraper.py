@@ -37,9 +37,7 @@ def extract_next_links(url: str, resp: utils.response.Response):
     for link in soup.find_all("a"):
         new_url = link.get("href")
         if new_url and is_valid(new_url):
-            print(f"VALID: {new_url}")
-        else:
-            print(f"INVALID: {new_url}")
+            next_links.append(new_url);
 
     return next_links
 
@@ -68,3 +66,21 @@ def is_valid(url):
     except TypeError:
         print ("TypeError for ", parsed)
         raise
+
+# TODO:
+# Track visited pages
+# Crawl pages with high textual content
+# Detect and avoid infinite traps
+# Detect and avoid sets of similar pages with no information
+# Detect redirects and if the page redirects, index the redirected content
+# Detect and avoid dead URLs that return a 200 status but no data
+# Detect and avoid crawling large files, especially if they have low information value
+
+# REPORT:
+#   1. How many unique pages (discard fragment) (disregard textual similarity)
+#   2. What is longest page (disregard html markup)
+#   3. What are the 50 most common words (ignore english stop words)
+#   4. How many subdomains in ics.uci.edu domain (list alphabetically and by num. unique pages in sub-dom)
+
+# EC: Implement checks and usage of the robots and sitemap files
+# EC: Implement exact and near webpage similarity detection using lecture method
