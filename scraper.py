@@ -1,6 +1,7 @@
 import re
 from urllib.parse import urlparse
 import utils.response
+from bs4 import BeautifulSoup
 
 def scraper(url: str, resp: utils.response.Response) -> list:
     # This function needs to return a list of urls that are scraped from the response.
@@ -12,7 +13,7 @@ def scraper(url: str, resp: utils.response.Response) -> list:
     links = extract_next_links(url, resp)
     return [link for link in links if is_valid(link)]
 
-def extract_next_links(url, resp):
+def extract_next_links(url: str, resp: utils.response.Response):
     # Implementation required.
     # url: the URL that was used to get the page
     # resp.url: the actual url of the page
@@ -22,7 +23,23 @@ def extract_next_links(url, resp):
     #         resp.raw_response.url: the url, again
     #         resp.raw_response.content: the content of the page!
     # Return a list with the hyperlinks (as strings) scrapped from resp.raw_response.content
-    return list()
+    #
+    # if website.permitsCrawl(url):
+    #   text = retrieveURL(url)
+    #   storeDocument(url, text)
+    #   for each url in parse(text):
+    #       frontier.addURL(url)
+    if (resp.status != 200):
+        return list()
+    next_links = []
+
+    soup = BeautifulSoup(resp.raw_response.content, "html.parser")
+    for link in soup.find_all("a"):
+        new_url = link.get("href")
+        if new_url and is_valid(new_url):
+            print(f"VALID: {new_url}")
+
+    return next_links
 
 def is_valid(url):
     # Decide whether to crawl this url or not. 
@@ -40,7 +57,8 @@ def is_valid(url):
             + r"|data|dat|exe|bz2|tar|msi|bin|7z|psd|dmg|iso"
             + r"|epub|dll|cnf|tgz|sha1"
             + r"|thmx|mso|arff|rtf|jar|csv"
-            + r"|rm|smil|wmv|swf|wma|zip|rar|gz)$", parsed.path.lower())
+            + r"|rm|smil|wmv|swf|wma|zip|rar|gz)$"
+            + r"|pdf|ppt|pptx|doc|docx|css|js", parsed.path.lower())
 
     except TypeError:
         print ("TypeError for ", parsed)
