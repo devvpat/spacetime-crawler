@@ -38,6 +38,8 @@ def extract_next_links(url: str, resp: utils.response.Response):
         new_url = link.get("href")
         if new_url and is_valid(new_url):
             print(f"VALID: {new_url}")
+        else:
+            print(f"INVALID: {new_url}")
 
     return next_links
 
@@ -49,6 +51,9 @@ def is_valid(url):
         parsed = urlparse(url)
         if parsed.scheme not in set(["http", "https"]):
             return False
+        # check if url is in the domain (https://regexr.com/ helped me figure out the right expression)
+        if not re.match(r".*\.(ics|cs|informatics|stat)\.uci\.edu/.*", parsed.geturl()):
+            return False
         return not re.match(
             r".*\.(css|js|bmp|gif|jpe?g|ico"
             + r"|png|tiff?|mid|mp2|mp3|mp4"
@@ -57,8 +62,8 @@ def is_valid(url):
             + r"|data|dat|exe|bz2|tar|msi|bin|7z|psd|dmg|iso"
             + r"|epub|dll|cnf|tgz|sha1"
             + r"|thmx|mso|arff|rtf|jar|csv"
-            + r"|rm|smil|wmv|swf|wma|zip|rar|gz)$"
-            + r"|pdf|ppt|pptx|doc|docx|css|js", parsed.path.lower())
+            + r"|rm|smil|wmv|swf|wma|zip|rar|gz"
+            + r"|pdf|ppt|pptx|doc|docx|css|js$", parsed.path.lower())
 
     except TypeError:
         print ("TypeError for ", parsed)
