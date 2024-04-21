@@ -4,6 +4,9 @@ import utils.response
 from bs4 import BeautifulSoup
 
 class Scraper:
+    visited_pages: set[str] = set()    # set of all unique urls visited
+    longest_page: tuple[str, int] = ("", -1)    # (url, num words)
+
     def __init__(self) -> None:
         pass
         
@@ -33,15 +36,22 @@ class Scraper:
         #   storeDocument(url, text)
         #   for each url in parse(text):
         #       frontier.addURL(url)
-        if resp.status != 200 or resp.raw_response:
+        parsed_url = urlparse(url, allow_fragments=False)
+        if resp.status != 200 or resp.raw_response is None or parsed_url in Scraper.visited_pages:
             return list()
+        Scraper.visited_pages.add(parsed_url)
+
         next_links = []
 
         soup = BeautifulSoup(resp.raw_response.content, "html.parser")
         for link in soup.find_all("a"):
             new_url = link.get("href")
-            if new_url and is_valid(new_url):
+            if new_url and is_valid(new_url) and new_url:
                 next_links.append(new_url)
+
+        # check for redirect, url = original url | resp.raw_response.url = redirected url
+        if url != resp.raw_response.url:
+            next_links.append(resp.raw_response.url)
 
         return next_links
 
@@ -76,8 +86,8 @@ def is_valid(url):
 # Crawl pages with high textual content
 # Detect and avoid infinite traps
 # Detect and avoid sets of similar pages with no information
-# Detect redirects and if the page redirects, index the redirected content
-# Detect and avoid dead URLs that return a 200 status but no data
+# Detect redirects and if the page redirects, index the redirected content (done)
+# Detect and avoid dead URLs that return a 200 status but no data (done)
 # Detect and avoid crawling large files, especially if they have low information value
 
 # REPORT:
