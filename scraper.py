@@ -2,10 +2,27 @@ import re
 from urllib.parse import urlparse
 import utils.response
 from bs4 import BeautifulSoup
+from collections import defaultdict
 
 class Scraper:
     visited_pages: set[str] = set()    # set of all unique urls visited
     longest_page: tuple[str, int] = ("", -1)    # (url, num words)
+    word_count: defaultdict[str, int] = defaultdict(int)    # dict[word] = count
+    ics_subdomains: defaultdict[str, int] = defaultdict(int)    # dict[ics subdomain] = num unique pages
+    ENGLISH_STOPWORDS: set[str] = {'a', 'about', 'above', 'after', 'again', 'against',  'all', 'am', 'an', 
+        'and', 'any', 'are', "aren't", 'as',  'at', 'be', 'because', 'been', 'before', 'being', 'below', 'between', 
+        'both', 'but', 'by', "can't", 'cannot', 'could', "couldn't", 'did', "didn't", 'do', 'does', "doesn't", 'doing', 
+        "don't", 'down', 'during', 'each', 'few', 'for', 'from', 'further', 'had', "hadn't", 'has', "hasn't", 'have', 
+        "haven't", 'having', 'he', "he'd", "he'll", "he's", 'her', 'here', "here's", 'hers', 'herself', 'him', 'himself', 
+        'his', 'how', "how's", 'i', "i'd", "i'll", "i'm", "i've", 'if', 'in', 'into', 'is', "isn't", 'it', "it's", 'its', 
+        'itself', "let's", 'me', 'more', 'most', "mustn't", 'my', 'myself', 'no', 'nor', 'not', 'of', 'off', 'on', 'once', 
+        'only', 'or', 'other', 'ought', 'our', 'ours\tourselves', 'out', 'over', 'own', 'same', "shan't", 'she', "she'd", 
+        "she'll", "she's", 'should', "shouldn't", 'so', 'some', 'such', 'than', 'that', "that's", 'the', 'their', 'theirs', 
+        'them', 'themselves', 'then', 'there', "there's", 'these', 'they', "they'd", "they'll", "they're", "they've", 'this', 
+        'those', 'through', 'to', 'too', 'under', 'until', 'up', 'very', 'was', "wasn't", 'we', "we'd", "we'll", "we're", 
+        "we've", 'were', "weren't", 'what', "what's", 'when', "when's", 'where', "where's", 'which', 'while', 'who', "who's", 
+        'whom', 'why', "why's", 'with', "won't", 'would', "wouldn't", 'you', "you'd", "you'll", "you're", "you've", 'your', 
+        'yours', 'yourself', 'yourselves'}
 
     def __init__(self) -> None:
         pass
@@ -43,10 +60,14 @@ class Scraper:
 
         next_links = []
 
+        # referenced https://www.geeksforgeeks.org/beautifulsoup-scraping-link-from-html/ for bs4 usage
+        # referenced https://medium.com/quantrium-tech/extracting-words-from-a-string-in-python-using-regex-dac4b385c1b8 for extracting words using re
         soup = BeautifulSoup(resp.raw_response.content, "html.parser")
+        page_words = re.findall("[a-z0-9]+", soup.get_text().lower())    # define a word = sequence of alphanumeric char (lowercase a-z AND digits 0-9)
+        self.update_longest_page_and_word_count(page_words, resp.url)
         for link in soup.find_all("a"):
             new_url = link.get("href")
-            if new_url and is_valid(new_url) and new_url:
+            if new_url and is_valid(new_url):
                 next_links.append(new_url)
 
         # check for redirect, url = original url | resp.raw_response.url = redirected url
@@ -54,6 +75,16 @@ class Scraper:
             next_links.append(resp.raw_response.url)
 
         return next_links
+    
+    def update_longest_page_and_word_count(self, words: list[str], url: str):
+        # first update longest page (do not filter stopwords)
+        if len(words) > Scraper.longest_page[1]:
+            Scraper.longest_page = (url, len(words))
+        # next, update word count (filter out stopwords)
+        for word in words:
+            if word not in Scraper.ENGLISH_STOPWORDS:
+                Scraper.word_count[word] += 1
+
 
 def is_valid(url):
     # Decide whether to crawl this url or not. 
