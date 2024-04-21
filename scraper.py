@@ -54,7 +54,7 @@ class Scraper:
         #   for each url in parse(text):
         #       frontier.addURL(url)
         parsed_url = urlparse(resp.url, allow_fragments=False)
-        if resp.status != 200 or resp.raw_response is None or parsed_url in Scraper.visited_pages:
+        if resp.status != 200 or not resp or not resp.raw_response or parsed_url in Scraper.visited_pages:
             return list()
         Scraper.visited_pages.add(parsed_url)
 
@@ -65,6 +65,8 @@ class Scraper:
         soup = BeautifulSoup(resp.raw_response.content, "html.parser")
         page_words = re.findall("[a-z0-9]+", soup.get_text().lower())    # define a word = sequence of alphanumeric char (lowercase a-z AND digits 0-9)
         self.update_longest_page_and_word_count(page_words, resp.url)
+        if re.match(r".*\.ics\.uci\.edu$", parsed_url.netloc):
+            Scraper.ics_subdomains[parsed_url.netloc] += 1
         for link in soup.find_all("a"):
             new_url = link.get("href")
             if new_url and is_valid(new_url):
@@ -122,10 +124,10 @@ def is_valid(url):
 # Detect and avoid crawling large files, especially if they have low information value
 
 # REPORT:
-#   1. How many unique pages (discard fragment) (disregard textual similarity)
-#   2. What is longest page (disregard html markup)
-#   3. What are the 50 most common words (ignore english stop words)
-#   4. How many subdomains in ics.uci.edu domain (list alphabetically and by num. unique pages in sub-dom)
+#   1. How many unique pages (discard fragment) (disregard textual similarity) (done)
+#   2. What is longest page (disregard html markup) (done)
+#   3. What are the 50 most common words (ignore english stop words) (done)
+#   4. How many subdomains in ics.uci.edu domain (list alphabetically and by num. unique pages in sub-dom) (done)
 
 # EC: Implement checks and usage of the robots and sitemap files
 # EC: Implement exact and near webpage similarity detection using lecture method
