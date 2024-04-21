@@ -3,43 +3,47 @@ from urllib.parse import urlparse
 import utils.response
 from bs4 import BeautifulSoup
 
-def scraper(url: str, resp: utils.response.Response) -> list:
-    # This function needs to return a list of urls that are scraped from the response.
-    # An empty list for responses that are empty. 
-    # These urls will be added to the Frontier and retrieved from the cache.
-    # These urls have to be filtered so that urls that do not have to be downloaded are not added to the frontier.
-    # The first step of filtering the urls can be by using the is_valid function provided in the same scraper.py file. 
-    # Additional rules should be added to the is_valid function to filter the urls.
-    links = extract_next_links(url, resp)
-    return [link for link in links if is_valid(link)]
+class Scraper:
+    def __init__(self) -> None:
+        pass
+        
+    def scraper(self, url: str, resp: utils.response.Response) -> list:
+        # This function needs to return a list of urls that are scraped from the response.
+        # An empty list for responses that are empty. 
+        # These urls will be added to the Frontier and retrieved from the cache.
+        # These urls have to be filtered so that urls that do not have to be downloaded are not added to the frontier.
+        # The first step of filtering the urls can be by using the is_valid function provided in the same scraper.py file. 
+        # Additional rules should be added to the is_valid function to filter the urls.
+        links = self.extract_next_links(url, resp)
+        return [link for link in links if is_valid(link)]
 
-def extract_next_links(url: str, resp: utils.response.Response):
-    # Implementation required.
-    # url: the URL that was used to get the page
-    # resp.url: the actual url of the page
-    # resp.status: the status code returned by the server. 200 is OK, you got the page. Other numbers mean that there was some kind of problem.
-    # resp.error: when status is not 200, you can check the error here, if needed.
-    # resp.raw_response: this is where the page actually is. More specifically, the raw_response has two parts:
-    #         resp.raw_response.url: the url, again
-    #         resp.raw_response.content: the content of the page!
-    # Return a list with the hyperlinks (as strings) scrapped from resp.raw_response.content
-    #
-    # if website.permitsCrawl(url):
-    #   text = retrieveURL(url)
-    #   storeDocument(url, text)
-    #   for each url in parse(text):
-    #       frontier.addURL(url)
-    if (resp.status != 200):
-        return list()
-    next_links = []
+    def extract_next_links(self, url: str, resp: utils.response.Response):
+        # Implementation required.
+        # url: the URL that was used to get the page
+        # resp.url: the actual url of the page
+        # resp.status: the status code returned by the server. 200 is OK, you got the page. Other numbers mean that there was some kind of problem.
+        # resp.error: when status is not 200, you can check the error here, if needed.
+        # resp.raw_response: this is where the page actually is. More specifically, the raw_response has two parts:
+        #         resp.raw_response.url: the url, again
+        #         resp.raw_response.content: the content of the page!
+        # Return a list with the hyperlinks (as strings) scrapped from resp.raw_response.content
+        #
+        # if website.permitsCrawl(url):
+        #   text = retrieveURL(url)
+        #   storeDocument(url, text)
+        #   for each url in parse(text):
+        #       frontier.addURL(url)
+        if resp.status != 200 or resp.raw_response:
+            return list()
+        next_links = []
 
-    soup = BeautifulSoup(resp.raw_response.content, "html.parser")
-    for link in soup.find_all("a"):
-        new_url = link.get("href")
-        if new_url and is_valid(new_url):
-            next_links.append(new_url);
+        soup = BeautifulSoup(resp.raw_response.content, "html.parser")
+        for link in soup.find_all("a"):
+            new_url = link.get("href")
+            if new_url and is_valid(new_url):
+                next_links.append(new_url)
 
-    return next_links
+        return next_links
 
 def is_valid(url):
     # Decide whether to crawl this url or not. 
