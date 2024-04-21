@@ -1,5 +1,5 @@
 import re
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin
 import utils.response
 from bs4 import BeautifulSoup
 from collections import defaultdict
@@ -88,9 +88,9 @@ class Scraper:
 
         # extract urls from the page and add them to the frontier
         for link in soup.find_all("a"):
-            new_url = link.get("href")
-            if new_url and is_valid(new_url):
-                next_links.append(new_url)
+            new_url = urljoin(resp.url, link.get("href"))    # turn relative url to absolute if needed;
+            if new_url and is_valid(new_url):                # urljoin handles both cases if link.get("href")
+                next_links.append(new_url)                   # already is an absolute url or is only relative
 
         # check for redirect, url = original url | resp.url = redirected url
         if url != resp.url:
