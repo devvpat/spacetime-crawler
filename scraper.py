@@ -23,6 +23,8 @@ class Scraper:
         "we've", 'were', "weren't", 'what', "what's", 'when', "when's", 'where', "where's", 'which', 'while', 'who', "who's", 
         'whom', 'why', "why's", 'with', "won't", 'would', "wouldn't", 'you', "you'd", "you'll", "you're", "you've", 'your', 
         'yours', 'yourself', 'yourselves'}
+    PAGE_MIN_SIZE: int = 250    # min byte size (250) for resp.raw_response.content
+    PAGE_MAX_SIZE: int = 5 * 1024 * 1024    # max byte size (5 MB) for resp.raw_response.content
 
     def __init__(self) -> None:
         pass
@@ -53,8 +55,12 @@ class Scraper:
         #   storeDocument(url, text)
         #   for each url in parse(text):
         #       frontier.addURL(url)
+
+        # first parse the url and do basic chekcs to confirm validity of url
         parsed_url = urlparse(resp.url, allow_fragments=False)
         if resp.status != 200 or not resp or not resp.raw_response or parsed_url in Scraper.visited_pages:
+            return list()
+        if not self.page_is_valid_size(resp):
             return list()
         Scraper.visited_pages.add(parsed_url)
 
@@ -62,11 +68,17 @@ class Scraper:
 
         # referenced https://www.geeksforgeeks.org/beautifulsoup-scraping-link-from-html/ for bs4 usage
         # referenced https://medium.com/quantrium-tech/extracting-words-from-a-string-in-python-using-regex-dac4b385c1b8 for extracting words using re
+        
+        # parse the page for text and perfrom further validity tests on the page before extracting urls
         soup = BeautifulSoup(resp.raw_response.content, "html.parser")
         page_words = re.findall("[a-z0-9]+", soup.get_text().lower())    # define a word = sequence of alphanumeric char (lowercase a-z AND digits 0-9)
+        
+        # update counting stats 
         self.update_longest_page_and_word_count(page_words, resp.url)
         if re.match(r".*\.ics\.uci\.edu$", parsed_url.netloc):
             Scraper.ics_subdomains[parsed_url.netloc] += 1
+
+        # extract urls from the page and add them to the frontier
         for link in soup.find_all("a"):
             new_url = link.get("href")
             if new_url and is_valid(new_url):
@@ -86,6 +98,10 @@ class Scraper:
         for word in words:
             if word not in Scraper.ENGLISH_STOPWORDS:
                 Scraper.word_count[word] += 1
+
+    def page_is_valid_size(self, resp: utils.response.Response):
+        return Scraper.PAGE_MIN_SIZE <= len(resp.raw_response.content) and \
+               len(resp.raw_response.content) <= Scraper.PAGE_MAX_SIZE
 
 
 def is_valid(url):
@@ -115,13 +131,13 @@ def is_valid(url):
         raise
 
 # TODO:
-# Track visited pages
-# Crawl pages with high textual content
+# Track visited pages (done)
+# Crawl pages with high textual content (done)
 # Detect and avoid infinite traps
 # Detect and avoid sets of similar pages with no information
 # Detect redirects and if the page redirects, index the redirected content (done)
 # Detect and avoid dead URLs that return a 200 status but no data (done)
-# Detect and avoid crawling large files, especially if they have low information value
+# Detect and avoid crawling large files, especially if they have low information value (done)
 
 # REPORT:
 #   1. How many unique pages (discard fragment) (disregard textual similarity) (done)
