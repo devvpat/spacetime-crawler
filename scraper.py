@@ -53,7 +53,7 @@ class Scraper:
         #   storeDocument(url, text)
         #   for each url in parse(text):
         #       frontier.addURL(url)
-        parsed_url = urlparse(url, allow_fragments=False)
+        parsed_url = urlparse(resp.url, allow_fragments=False)
         if resp.status != 200 or resp.raw_response is None or parsed_url in Scraper.visited_pages:
             return list()
         Scraper.visited_pages.add(parsed_url)
@@ -70,9 +70,9 @@ class Scraper:
             if new_url and is_valid(new_url):
                 next_links.append(new_url)
 
-        # check for redirect, url = original url | resp.raw_response.url = redirected url
-        if url != resp.raw_response.url:
-            next_links.append(resp.raw_response.url)
+        # check for redirect, url = original url | resp.url = redirected url
+        if url != resp.url:
+            Scraper.visited_pages.append(urlparse(url, allow_fragments=False))
 
         return next_links
     
