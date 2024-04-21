@@ -102,6 +102,23 @@ class Scraper:
     def page_is_valid_size(self, resp: utils.response.Response):
         return Scraper.PAGE_MIN_SIZE <= len(resp.raw_response.content) and \
                len(resp.raw_response.content) <= Scraper.PAGE_MAX_SIZE
+    
+    @staticmethod
+    def ouput_crawl_statistics(filename: str = "crawl_summary.txt"):
+        with open(filename, "w") as file:
+            file.write("CS 121/INF 141 - Assignment 2: Web Crawler - Crawl Summary\n")
+            file.write("IR US24 70346322\n\n")
+            file.write(f"Total unique pages found = {len(Scraper.visited_pages)}\n\n")
+            file.write(f"Longest page = {Scraper.longest_page[0]} with {Scraper.longest_page[1]} words\n\n")
+            file.write(f"Top 50 most common words (excluding stop words):\n")
+            for ind, (key, value) in enumerate(sorted(Scraper.word_count, key=lambda item: item[1])):
+                if ind >= 50:
+                    break
+                file.write(f"\t{key}\n")
+            file.write("\n")
+            file.write(f"ics.uci.edu Subdomains:\n")
+            for key, value in sorted(Scraper.ics_subdomains, key=lambda item: (item[0], item[1])):
+                file.write(f"\t{key}, {value}\n")
 
 
 def is_valid(url):
