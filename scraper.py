@@ -9,6 +9,7 @@ class Scraper:
     longest_page: tuple[str, int] = ("", -1)    # (url, num words)
     word_count: defaultdict[str, int] = defaultdict(int)    # dict[word] = count
     ics_subdomains: defaultdict[str, int] = defaultdict(int)    # dict[ics subdomain] = num unique pages
+    all_fingerprints: list[set[int]] = []    # all fingerprints
     ENGLISH_STOPWORDS: set[str] = {'a', 'about', 'above', 'after', 'again', 'against',  'all', 'am', 'an', 
         'and', 'any', 'are', "aren't", 'as',  'at', 'be', 'because', 'been', 'before', 'being', 'below', 'between', 
         'both', 'but', 'by', "can't", 'cannot', 'could', "couldn't", 'did', "didn't", 'do', 'does', "doesn't", 'doing', 
@@ -16,7 +17,7 @@ class Scraper:
         "haven't", 'having', 'he', "he'd", "he'll", "he's", 'her', 'here', "here's", 'hers', 'herself', 'him', 'himself', 
         'his', 'how', "how's", 'i', "i'd", "i'll", "i'm", "i've", 'if', 'in', 'into', 'is', "isn't", 'it', "it's", 'its', 
         'itself', "let's", 'me', 'more', 'most', "mustn't", 'my', 'myself', 'no', 'nor', 'not', 'of', 'off', 'on', 'once', 
-        'only', 'or', 'other', 'ought', 'our', 'ours\tourselves', 'out', 'over', 'own', 'same', "shan't", 'she', "she'd", 
+        'only', 'or', 'other', 'ought', 'our', 'ours', 'ourselves', 'out', 'over', 'own', 'same', "shan't", 'she', "she'd", 
         "she'll", "she's", 'should', "shouldn't", 'so', 'some', 'such', 'than', 'that', "that's", 'the', 'their', 'theirs', 
         'them', 'themselves', 'then', 'there', "there's", 'these', 'they', "they'd", "they'll", "they're", "they've", 'this', 
         'those', 'through', 'to', 'too', 'under', 'until', 'up', 'very', 'was', "wasn't", 'we', "we'd", "we'll", "we're", 
@@ -25,6 +26,8 @@ class Scraper:
         'yours', 'yourself', 'yourselves'}
     PAGE_MIN_SIZE: int = 250    # min byte size (250) for resp.raw_response.content
     PAGE_MAX_SIZE: int = 5 * 1024 * 1024    # max byte size (5 MB) for resp.raw_response.content
+    PAGE_SIMILARITY_THRESHOLD = 0.9
+    TRAP_FINGERPRINT_CHECK = 15
 
     def __init__(self) -> None:
         pass
@@ -72,7 +75,12 @@ class Scraper:
         # parse the page for text and perfrom further validity tests on the page before extracting urls
         soup = BeautifulSoup(resp.raw_response.content, "html.parser")
         page_words = re.findall("[a-z0-9]+", soup.get_text().lower())    # define a word = sequence of alphanumeric char (lowercase a-z AND digits 0-9)
-        
+        # check for trap and similarity using page fingerprint method from lecture
+        page_fingerprint = self.create_fingerprint(page_words)
+        if self.check_for_recent_trap(page_fingerprint):
+            return list()
+        Scraper.all_fingerprints.append(page_fingerprint)
+
         # update counting stats 
         self.update_longest_page_and_word_count(page_words, resp.url)
         if re.match(r".*\.ics\.uci\.edu$", parsed_url.netloc):
@@ -86,7 +94,7 @@ class Scraper:
 
         # check for redirect, url = original url | resp.url = redirected url
         if url != resp.url:
-            Scraper.visited_pages.append(urlparse(url, allow_fragments=False))
+            Scraper.visited_pages.add(urlparse(url, allow_fragments=False))
 
         return next_links
     
@@ -120,6 +128,35 @@ class Scraper:
             for key, value in sorted(Scraper.ics_subdomains, key=lambda item: (item[0], item[1])):
                 file.write(f"\t{key}, {value}\n")
 
+    def create_fingerprint(self, words: list[str]) -> set[int]:
+        # create 3 grams
+        three_grams = (words[i:i+3] for i in range(len(words)-2))
+        # calculate hash values of 3 grams
+        three_gram_hashes = (hash(tuple(gram)) for gram in three_grams)
+        # select hash values using mod 4
+        return set(gram_hash for gram_hash in three_gram_hashes if gram_hash % 4 == 0)
+
+    def fingerprints_are_similar(self, fingerprint_1: set[int], fingerprint_2: set[int]):
+        intersection = fingerprint_1 & fingerprint_2
+        union = fingerprint_1 | fingerprint_2
+        if union:
+            similarity = len(intersection) / len(union) 
+        else:
+            similarity = int(len(intersection) == len(union))
+        return similarity >= Scraper.PAGE_SIMILARITY_THRESHOLD
+    
+    def check_for_recent_trap(self, fingerprint: set[int]):
+        # only start checking for traps once enough fingerprints have been stored
+        if len(Scraper.all_fingerprints) <= Scraper.TRAP_FINGERPRINT_CHECK:
+            return False
+        start_index_incl = len(Scraper.all_fingerprints)-2
+        end_index_excl = len(Scraper.all_fingerprints)-2-Scraper.TRAP_FINGERPRINT_CHECK
+        for i in range(start_index_incl, end_index_excl, -1):
+            if self.fingerprints_are_similar(fingerprint, Scraper.all_fingerprints[i]):
+                return True
+        return False
+
+
 
 def is_valid(url):
     # Decide whether to crawl this url or not. 
@@ -150,8 +187,8 @@ def is_valid(url):
 # TODO:
 # Track visited pages (done)
 # Crawl pages with high textual content (done)
-# Detect and avoid infinite traps
-# Detect and avoid sets of similar pages with no information
+# Detect and avoid infinite traps (done)
+# Detect and avoid sets of similar pages with no information (done)
 # Detect redirects and if the page redirects, index the redirected content (done)
 # Detect and avoid dead URLs that return a 200 status but no data (done)
 # Detect and avoid crawling large files, especially if they have low information value (done)
