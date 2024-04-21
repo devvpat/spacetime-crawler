@@ -6,6 +6,7 @@ from collections import defaultdict
 
 class Scraper:
     visited_pages: set[str] = set()    # set of all unique urls visited
+    pages_in_front: set[str] = set()    # pages that are in frontier, in a set for O(1) lookup
     longest_page: tuple[str, int] = ("", -1)    # (url, num words)
     word_count: defaultdict[str, int] = defaultdict(int)    # dict[word] = count
     ics_subdomains: defaultdict[str, int] = defaultdict(int)    # dict[ics subdomain] = num unique pages
@@ -24,8 +25,8 @@ class Scraper:
         "we've", 'were', "weren't", 'what', "what's", 'when', "when's", 'where', "where's", 'which', 'while', 'who', "who's", 
         'whom', 'why', "why's", 'with', "won't", 'would', "wouldn't", 'you', "you'd", "you'll", "you're", "you've", 'your', 
         'yours', 'yourself', 'yourselves'}
-    PAGE_MIN_SIZE: int = 250    # min byte size (250) for resp.raw_response.content
-    PAGE_MAX_SIZE: int = 5 * 1024 * 1024    # max byte size (5 MB) for resp.raw_response.content
+    PAGE_MIN_SIZE: int = 500    # min number of words a page should have
+    PAGE_MAX_SIZE: int = 10_000    # max number of words a page should have
     PAGE_SIMILARITY_THRESHOLD = 0.9
     TRAP_FINGERPRINT_CHECK = 15
 
@@ -52,20 +53,14 @@ class Scraper:
         #         resp.raw_response.url: the url, again
         #         resp.raw_response.content: the content of the page!
         # Return a list with the hyperlinks (as strings) scrapped from resp.raw_response.content
-        #
-        # if website.permitsCrawl(url):
-        #   text = retrieveURL(url)
-        #   storeDocument(url, text)
-        #   for each url in parse(text):
-        #       frontier.addURL(url)
 
         # first parse the url and do basic chekcs to confirm validity of url
         parsed_url = urlparse(resp.url, allow_fragments=False)
-        if resp.status != 200 or not resp or not resp.raw_response or parsed_url in Scraper.visited_pages:
+        if resp.status != 200 or not resp or not resp.raw_response or parsed_url.geturl() in Scraper.visited_pages:
             return list()
-        if not self.page_is_valid_size(resp):
-            return list()
-        Scraper.visited_pages.add(parsed_url)
+        Scraper.visited_pages.add(parsed_url.geturl())
+        Scraper.pages_in_front.discard(parsed_url.geturl())
+        print(f"Visting link #{len(Scraper.visited_pages)}")
 
         next_links = []
 
@@ -75,6 +70,8 @@ class Scraper:
         # parse the page for text and perfrom further validity tests on the page before extracting urls
         soup = BeautifulSoup(resp.raw_response.content, "html.parser")
         page_words = re.findall("[a-z0-9]+", soup.get_text().lower())    # define a word = sequence of alphanumeric char (lowercase a-z AND digits 0-9)
+        if not self.page_is_valid_size(page_words):
+            return list()
         # check for trap and similarity using page fingerprint method from lecture
         page_fingerprint = self.create_fingerprint(page_words)
         if self.check_for_recent_trap(page_fingerprint):
@@ -89,12 +86,14 @@ class Scraper:
         # extract urls from the page and add them to the frontier
         for link in soup.find_all("a"):
             new_url = urljoin(resp.url, link.get("href"))    # turn relative url to absolute if needed;
-            if new_url and is_valid(new_url):                # urljoin handles both cases if link.get("href")
-                next_links.append(new_url)                   # already is an absolute url or is only relative
+            new_url = urlparse(new_url, allow_fragments=False).geturl()
+            if new_url and is_valid(new_url) and new_url not in Scraper.visited_pages and new_url not in Scraper.pages_in_front:
+                next_links.append(new_url)
+                Scraper.pages_in_front.add(new_url)
 
         # check for redirect, url = original url | resp.url = redirected url
         if url != resp.url:
-            Scraper.visited_pages.add(urlparse(url, allow_fragments=False))
+            Scraper.visited_pages.add(urlparse(url, allow_fragments=False).geturl())
 
         return next_links
     
@@ -107,9 +106,9 @@ class Scraper:
             if word not in Scraper.ENGLISH_STOPWORDS:
                 Scraper.word_count[word] += 1
 
-    def page_is_valid_size(self, resp: utils.response.Response):
-        return Scraper.PAGE_MIN_SIZE <= len(resp.raw_response.content) and \
-               len(resp.raw_response.content) <= Scraper.PAGE_MAX_SIZE
+    def page_is_valid_size(self, words: list[str]):
+        return Scraper.PAGE_MIN_SIZE <= len(words) and \
+               len(words) <= Scraper.PAGE_MAX_SIZE
     
     @staticmethod
     def ouput_crawl_statistics(filename: str = "crawl_summary.txt"):
@@ -157,7 +156,6 @@ class Scraper:
         return False
 
 
-
 def is_valid(url):
     # Decide whether to crawl this url or not. 
     # If you decide to crawl it, return True; otherwise return False.
@@ -168,6 +166,10 @@ def is_valid(url):
             return False
         # check if url is in the domain (https://regexr.com/ helped me figure out the right expression)
         if not re.match(r".*\.(ics|cs|informatics|stat)\.uci\.edu/.*", parsed.geturl()):
+            return False
+        if re.match(r"\/doku\.php\/.*", parsed.path):
+            return False
+        if re.match(r"\/~eppstein\/pix\/.*", parsed.path):
             return False
         return not re.match(
             r".*\.(css|js|bmp|gif|jpe?g|ico"
