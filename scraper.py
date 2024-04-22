@@ -27,13 +27,13 @@ class Scraper:
         'yours', 'yourself', 'yourselves'}
     PAGE_MIN_SIZE: int = 500    # min number of words a page should have
     PAGE_MAX_SIZE: int = 10_000    # max number of words a page should have
-    PAGE_SIMILARITY_THRESHOLD = 0.9
-    TRAP_FINGERPRINT_CHECK = 15
+    PAGE_SIMILARITY_THRESHOLD = 0.9    # threshold for two pages to be 'similar'
+    TRAP_FINGERPRINT_CHECK = 15    # how many recent previous pages to compare against for traps/cycles
 
     def __init__(self) -> None:
         pass
         
-    def scraper(self, url: str, resp: utils.response.Response) -> list:
+    def scraper(self, url: str, resp: utils.response.Response) -> list[str]:
         # This function needs to return a list of urls that are scraped from the response.
         # An empty list for responses that are empty. 
         # These urls will be added to the Frontier and retrieved from the cache.
@@ -43,7 +43,7 @@ class Scraper:
         links = self.extract_next_links(url, resp)
         return [link for link in links if is_valid(link)]
 
-    def extract_next_links(self, url: str, resp: utils.response.Response):
+    def extract_next_links(self, url: str, resp: utils.response.Response) -> list[str]:
         # Implementation required.
         # url: the URL that was used to get the page
         # resp.url: the actual url of the page
@@ -60,13 +60,13 @@ class Scraper:
         if resp.status != 200 or not resp or not resp.raw_response \
            or defrag_url in Scraper.visited_pages or not is_valid(defrag_url):
             return list()
+        
+        # after basic checks, mark the link as 'visited' and update ics subdomain tracker
         Scraper.visited_pages.add(defrag_url)
         Scraper.pages_in_front.discard(defrag_url)
         if re.match(r".*\.ics\.uci\.edu", parsed_url.netloc):
             Scraper.ics_subdomains[urlunparse((parsed_url.scheme, parsed_url.netloc, "", "", "", ""))] += 1
             print(Scraper.ics_subdomains.items())
-
-        next_links = []
 
         # referenced https://www.geeksforgeeks.org/beautifulsoup-scraping-link-from-html/ for bs4 usage
         # referenced https://medium.com/quantrium-tech/extracting-words-from-a-string-in-python-using-regex-dac4b385c1b8 for extracting words using re
@@ -76,6 +76,7 @@ class Scraper:
         page_words = re.findall("[a-z0-9]+", soup.get_text().lower())    # define a word = sequence of alphanumeric char (lowercase a-z AND digits 0-9)
         if not self.page_is_valid_size(page_words):
             return list()
+        
         # check for trap and similarity using page fingerprint method from lecture
         page_fingerprint = self.create_fingerprint(page_words)
         if self.check_for_recent_trap(page_fingerprint):
@@ -85,7 +86,8 @@ class Scraper:
         # update counting stats 
         self.update_longest_page_and_word_count(page_words, resp.url)
 
-        # extract urls from the page and add them to the frontier
+        # extract urls from the page to add them to the frontier
+        next_links = []
         for link in soup.find_all("a"):
             new_url = urljoin(resp.url, link.get("href"))    # turn relative url to absolute if needed;
             new_url = urldefrag(new_url).url
@@ -99,7 +101,7 @@ class Scraper:
 
         return next_links
     
-    def update_longest_page_and_word_count(self, words: list[str], url: str):
+    def update_longest_page_and_word_count(self, words: list[str], url: str) -> None:
         # first update longest page (do not filter stopwords)
         if len(words) > Scraper.longest_page[1]:
             Scraper.longest_page = (url, len(words))
@@ -108,12 +110,13 @@ class Scraper:
             if word not in Scraper.ENGLISH_STOPWORDS:
                 Scraper.word_count[word] += 1
 
-    def page_is_valid_size(self, words: list[str]):
+    def page_is_valid_size(self, words: list[str]) -> bool:
+        # return whether the number of words in the page is in a predefined interval
         return Scraper.PAGE_MIN_SIZE <= len(words) and \
                len(words) <= Scraper.PAGE_MAX_SIZE
     
     @staticmethod
-    def ouput_crawl_statistics(filename: str = "crawl_summary.txt"):
+    def ouput_crawl_statistics(filename: str = "crawl_summary.txt") -> None:
         with open(filename, "w") as file:
             file.write("CS 121/INF 141 - Assignment 2: Web Crawler - Crawl Summary\n")
             file.write("IR US24 70346322\n\n")
@@ -135,7 +138,8 @@ class Scraper:
         # select hash values using mod 4
         return set(gram_hash for gram_hash in three_gram_hashes if gram_hash % 4 == 0)
 
-    def fingerprints_are_similar(self, fingerprint_1: set[int], fingerprint_2: set[int]):
+    def fingerprints_are_similar(self, fingerprint_1: set[int], fingerprint_2: set[int]) -> bool:
+        # similarity if intersection(fingerprints) / union(fingerprints) >= threshold
         intersection = fingerprint_1 & fingerprint_2
         union = fingerprint_1 | fingerprint_2
         if union:
@@ -144,10 +148,11 @@ class Scraper:
             similarity = int(len(intersection) == len(union))
         return similarity >= Scraper.PAGE_SIMILARITY_THRESHOLD
     
-    def check_for_recent_trap(self, fingerprint: set[int]):
+    def check_for_recent_trap(self, fingerprint: set[int]) -> bool:
         # only start checking for traps once enough fingerprints have been stored
         if len(Scraper.all_fingerprints) <= Scraper.TRAP_FINGERPRINT_CHECK:
             return False
+        # compare fingerprint arg to recent fingerprints for their similarity
         start_index_incl = len(Scraper.all_fingerprints)-2
         end_index_excl = len(Scraper.all_fingerprints)-2-Scraper.TRAP_FINGERPRINT_CHECK
         for i in range(start_index_incl, end_index_excl, -1):
@@ -156,7 +161,7 @@ class Scraper:
         return False
 
 
-def is_valid(url):
+def is_valid(url) -> bool:
     # Decide whether to crawl this url or not. 
     # If you decide to crawl it, return True; otherwise return False.
     # There are already some conditions that return False.
@@ -190,21 +195,3 @@ def is_valid(url):
     except TypeError:
         print ("TypeError for ", parsed)
         raise
-
-# TODO:
-# Track visited pages (done)
-# Crawl pages with high textual content (done)
-# Detect and avoid infinite traps (done)
-# Detect and avoid sets of similar pages with no information (done)
-# Detect redirects and if the page redirects, index the redirected content (done)
-# Detect and avoid dead URLs that return a 200 status but no data (done)
-# Detect and avoid crawling large files, especially if they have low information value (done)
-
-# REPORT:
-#   1. How many unique pages (discard fragment) (disregard textual similarity) (done)
-#   2. What is longest page (disregard html markup) (done)
-#   3. What are the 50 most common words (ignore english stop words) (done)
-#   4. How many subdomains in ics.uci.edu domain (list alphabetically and by num. unique pages in sub-dom) (done)
-
-# EC: Implement checks and usage of the robots and sitemap files
-# EC: Implement exact and near webpage similarity detection using lecture method
