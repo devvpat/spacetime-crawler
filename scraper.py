@@ -1,5 +1,5 @@
 import re
-from urllib.parse import urlparse, urljoin
+from urllib.parse import urlparse, urljoin, urldefrag, urlunparse
 import utils.response
 from bs4 import BeautifulSoup
 from collections import defaultdict
@@ -56,11 +56,15 @@ class Scraper:
 
         # first parse the url and do basic chekcs to confirm validity of url
         parsed_url = urlparse(resp.url, allow_fragments=False)
-        if resp.status != 200 or not resp or not resp.raw_response or parsed_url.geturl() in Scraper.visited_pages:
+        defrag_url = urldefrag(resp.url).url
+        if resp.status != 200 or not resp or not resp.raw_response \
+           or defrag_url in Scraper.visited_pages or not is_valid(defrag_url):
             return list()
-        Scraper.visited_pages.add(parsed_url.geturl())
-        Scraper.pages_in_front.discard(parsed_url.geturl())
-        print(f"Visting link #{len(Scraper.visited_pages)}")
+        Scraper.visited_pages.add(defrag_url)
+        Scraper.pages_in_front.discard(defrag_url)
+        if re.match(r".*\.ics\.uci\.edu", parsed_url.netloc):
+            Scraper.ics_subdomains[urlunparse((parsed_url.scheme, parsed_url.netloc, "", "", "", ""))] += 1
+            print(Scraper.ics_subdomains.items())
 
         next_links = []
 
@@ -80,20 +84,18 @@ class Scraper:
 
         # update counting stats 
         self.update_longest_page_and_word_count(page_words, resp.url)
-        if re.match(r".*\.ics\.uci\.edu$", parsed_url.netloc):
-            Scraper.ics_subdomains[parsed_url.netloc] += 1
 
         # extract urls from the page and add them to the frontier
         for link in soup.find_all("a"):
             new_url = urljoin(resp.url, link.get("href"))    # turn relative url to absolute if needed;
-            new_url = urlparse(new_url, allow_fragments=False).geturl()
+            new_url = urldefrag(new_url).url
             if new_url and is_valid(new_url) and new_url not in Scraper.visited_pages and new_url not in Scraper.pages_in_front:
                 next_links.append(new_url)
                 Scraper.pages_in_front.add(new_url)
 
         # check for redirect, url = original url | resp.url = redirected url
         if url != resp.url:
-            Scraper.visited_pages.add(urlparse(url, allow_fragments=False).geturl())
+            Scraper.visited_pages.add(urldefrag(url).url)
 
         return next_links
     
@@ -118,13 +120,11 @@ class Scraper:
             file.write(f"Total unique pages found = {len(Scraper.visited_pages)}\n\n")
             file.write(f"Longest page = {Scraper.longest_page[0]} with {Scraper.longest_page[1]} words\n\n")
             file.write(f"Top 50 most common words (excluding stop words):\n")
-            for ind, (key, value) in enumerate(sorted(Scraper.word_count, key=lambda item: item[1])):
-                if ind >= 50:
-                    break
+            for key, value in (sorted(Scraper.word_count.items(), key=lambda item: item[1]))[:50]:
                 file.write(f"\t{key}\n")
             file.write("\n")
             file.write(f"ics.uci.edu Subdomains:\n")
-            for key, value in sorted(Scraper.ics_subdomains, key=lambda item: (item[0], item[1])):
+            for key, value in sorted(Scraper.ics_subdomains.items(), key=lambda item: (item[0], item[1])):
                 file.write(f"\t{key}, {value}\n")
 
     def create_fingerprint(self, words: list[str]) -> set[int]:
@@ -165,11 +165,15 @@ def is_valid(url):
         if parsed.scheme not in set(["http", "https"]):
             return False
         # check if url is in the domain (https://regexr.com/ helped me figure out the right expression)
-        if not re.match(r".*\.(ics|cs|informatics|stat)\.uci\.edu/.*", parsed.geturl()):
+        if not re.match(r".*\.(ics|cs|informatics|stat)\.uci\.edu$", parsed.netloc):
             return False
         if re.match(r"\/doku\.php\/.*", parsed.path):
             return False
         if re.match(r"\/~eppstein\/pix\/.*", parsed.path):
+            return False
+        if re.match(r".*grape\.ics\.uci\.edu.*", parsed.netloc):
+            return False
+        if re.match(r".*\/pdf.*", parsed.path):
             return False
         return not re.match(
             r".*\.(css|js|bmp|gif|jpe?g|ico"
@@ -180,6 +184,7 @@ def is_valid(url):
             + r"|epub|dll|cnf|tgz|sha1"
             + r"|thmx|mso|arff|rtf|jar|csv"
             + r"|rm|smil|wmv|swf|wma|zip|rar|gz"
+            + r"|java|war|jar"
             + r"|pdf|ppt|pptx|doc|docx|css|js)$", parsed.path.lower())
 
     except TypeError:
