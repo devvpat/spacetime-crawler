@@ -58,7 +58,7 @@ class Scraper:
         # parse the url and do basic checks to confirm validity of url
         parsed_url = urlparse(resp.url, allow_fragments=False)
         defrag_url = urldefrag(resp.url).url
-        # perform robots.txt check first
+        # perform robots.txt check first - referenced https://docs.python.org/3/library/urllib.robotparser.html for help
         rfp = RobotFileParser()
         rfp.set_url(urlunparse((parsed_url.scheme, parsed_url.netloc, "/robots.txt", "", "", "")))
         rfp.read()
