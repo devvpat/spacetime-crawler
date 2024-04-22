@@ -1,5 +1,6 @@
 import re
 from urllib.parse import urlparse, urljoin, urldefrag, urlunparse
+from urllib.robotparser import RobotFileParser
 import utils.response
 from bs4 import BeautifulSoup
 from collections import defaultdict
@@ -54,9 +55,15 @@ class Scraper:
         #         resp.raw_response.content: the content of the page!
         # Return a list with the hyperlinks (as strings) scrapped from resp.raw_response.content
 
-        # first parse the url and do basic chekcs to confirm validity of url
+        # parse the url and do basic checks to confirm validity of url
         parsed_url = urlparse(resp.url, allow_fragments=False)
         defrag_url = urldefrag(resp.url).url
+        # perform robots.txt check first
+        rfp = RobotFileParser()
+        rfp.set_url(urlunparse((parsed_url.scheme, parsed_url.netloc, "/robots.txt", "", "", "")))
+        rfp.read()
+        if not rfp.can_fetch("IR US24 70346322", defrag_url):
+            return list()
         if resp.status != 200 or not resp or not resp.raw_response \
            or defrag_url in Scraper.visited_pages or not is_valid(defrag_url):
             return list()
