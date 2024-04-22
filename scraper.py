@@ -59,11 +59,14 @@ class Scraper:
         parsed_url = urlparse(resp.url, allow_fragments=False)
         defrag_url = urldefrag(resp.url).url
         # perform robots.txt check first - referenced https://docs.python.org/3/library/urllib.robotparser.html for help
-        rfp = RobotFileParser()
-        rfp.set_url(urlunparse((parsed_url.scheme, parsed_url.netloc, "/robots.txt", "", "", "")))
-        rfp.read()
-        if not rfp.can_fetch("IR US24 70346322", defrag_url):
-            return list()
+        try:
+            rfp = RobotFileParser()
+            rfp.set_url(urlunparse((parsed_url.scheme, parsed_url.netloc, "/robots.txt", "", "", "")))
+            rfp.read()
+            if not rfp.can_fetch("IR US24 70346322", defrag_url):
+                return list()
+        except:
+            pass
         if resp.status != 200 or not resp or not resp.raw_response \
            or defrag_url in Scraper.visited_pages or not is_valid(defrag_url):
             return list()
@@ -73,7 +76,6 @@ class Scraper:
         Scraper.pages_in_front.discard(defrag_url)
         if re.match(r".*\.ics\.uci\.edu", parsed_url.netloc):
             Scraper.ics_subdomains[urlunparse((parsed_url.scheme, parsed_url.netloc, "", "", "", ""))] += 1
-            print(Scraper.ics_subdomains.items())
 
         # referenced https://www.geeksforgeeks.org/beautifulsoup-scraping-link-from-html/ for bs4 usage
         # referenced https://medium.com/quantrium-tech/extracting-words-from-a-string-in-python-using-regex-dac4b385c1b8 for extracting words using re
