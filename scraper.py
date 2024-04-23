@@ -57,12 +57,12 @@ class Scraper:
         # Return a list with the hyperlinks (as strings) scrapped from resp.raw_response.content
 
         # parse the url and do basic checks to confirm validity of url
-        parsed_url = urlparse(resp.url.lower(), allow_fragments=False)
         defrag_url = urldefrag(resp.url.lower()).url
-
+        parsed_url = urlparse(defrag_url, allow_fragments=False)
+        no_scheme_url = parsed_url.netloc + urlunparse(("", "", parsed_url.path, parsed_url.params, parsed_url.query, ""))
         # verify the download request went through properply and the website itself is valid 
         if not resp or resp.status != 200 or not resp.raw_response \
-           or defrag_url in Scraper.visited_pages or not is_valid(defrag_url):
+           or no_scheme_url in Scraper.visited_pages or not is_valid(defrag_url):
             return list()
 
         # perform robots.txt check - referenced https://docs.python.org/3/library/urllib.robotparser.html for help
@@ -83,10 +83,10 @@ class Scraper:
             pass
         
         # after basic checks, mark the link as 'visited' and update ics subdomain tracker
-        Scraper.visited_pages.add(defrag_url)
-        Scraper.pages_in_front.discard(defrag_url)
+        Scraper.visited_pages.add(no_scheme_url)
+        Scraper.pages_in_front.discard(no_scheme_url)
         if re.match(r".*\.ics\.uci\.edu", parsed_url.netloc):
-            Scraper.ics_subdomains[urlunparse((parsed_url.scheme, parsed_url.netloc, "", "", "", ""))] += 1
+            Scraper.ics_subdomains[parsed_url.netloc] += 1
 
         # referenced https://www.geeksforgeeks.org/beautifulsoup-scraping-link-from-html/ for bs4 usage
         # referenced https://medium.com/quantrium-tech/extracting-words-from-a-string-in-python-using-regex-dac4b385c1b8 for extracting words using re
@@ -109,15 +109,20 @@ class Scraper:
         # extract urls from the page to add them to the frontier
         next_links = []
         for link in soup.find_all("a"):
-            new_url = urljoin(resp.url.lower(), link.get("href"))    # turn relative url to absolute if needed;
+            new_url = urljoin(resp.url.lower(), link.get("href")).lower()    # turn relative url to absolute if needed;
             new_url = urldefrag(new_url).url
-            if new_url and is_valid(new_url) and new_url not in Scraper.visited_pages and new_url not in Scraper.pages_in_front:
+            new_parsed_url = urlparse(new_url, allow_fragments=False)
+            new_no_scheme_url = new_parsed_url.netloc + urlunparse(("", "", new_parsed_url.path, new_parsed_url.params, new_parsed_url.query, ""))
+            if new_url and is_valid(new_url) and new_no_scheme_url not in Scraper.visited_pages and new_no_scheme_url not in Scraper.pages_in_front:
                 next_links.append(new_url)
-                Scraper.pages_in_front.add(new_url)
+                Scraper.pages_in_front.add(new_no_scheme_url)
 
         # check for redirect, url = original url | resp.url = redirected url
         if url.lower() != resp.url.lower():
-            Scraper.visited_pages.add(urldefrag(url.lower()).url)
+            old_url_defrag = urldefrag(url.lower()).url
+            old_parsed_url = urlparse(old_url_defrag, allow_fragments=False)
+            old_no_scheme_url = old_parsed_url.netloc + urlunparse(("", "", old_parsed_url.path, old_parsed_url.params, old_parsed_url.query, ""))
+            Scraper.visited_pages.add(old_no_scheme_url)
 
         return next_links
     
@@ -148,7 +153,7 @@ class Scraper:
             file.write("\n")
             file.write(f"ics.uci.edu Subdomains:\n")
             for key, value in sorted(Scraper.ics_subdomains.items(), key=lambda item: (item[0], item[1])):
-                file.write(f"\t{key}, {value}\n")
+                file.write(f"\thttp://{key}, {value}\n")
 
     def create_fingerprint(self, words: list[str]) -> set[int]:
         # create 3 grams
