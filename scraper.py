@@ -12,6 +12,7 @@ class Scraper:
     word_count: defaultdict[str, int] = defaultdict(int)    # dict[word] = count
     ics_subdomains: defaultdict[str, int] = defaultdict(int)    # dict[ics subdomain] = num unique pages
     all_fingerprints: list[set[int]] = []    # all fingerprints
+    robot_allowed: dict[str, bool] = defaultdict(bool)
     ENGLISH_STOPWORDS: set[str] = {'a', 'about', 'above', 'after', 'again', 'against',  'all', 'am', 'an', 
         'and', 'any', 'are', "aren't", 'as',  'at', 'be', 'because', 'been', 'before', 'being', 'below', 'between', 
         'both', 'but', 'by', "can't", 'cannot', 'could', "couldn't", 'did', "didn't", 'do', 'does', "doesn't", 'doing', 
@@ -26,10 +27,10 @@ class Scraper:
         "we've", 'were', "weren't", 'what', "what's", 'when', "when's", 'where', "where's", 'which', 'while', 'who', "who's", 
         'whom', 'why', "why's", 'with', "won't", 'would', "wouldn't", 'you', "you'd", "you'll", "you're", "you've", 'your', 
         'yours', 'yourself', 'yourselves'}
-    PAGE_MIN_SIZE: int = 500    # min number of words a page should have
+    PAGE_MIN_SIZE: int = 250    # min number of words a page should have
     PAGE_MAX_SIZE: int = 10_000    # max number of words a page should have
     PAGE_SIMILARITY_THRESHOLD = 0.9    # threshold for two pages to be 'similar'
-    TRAP_FINGERPRINT_CHECK = 15    # how many recent previous pages to compare against for traps/cycles
+    TRAP_FINGERPRINT_CHECK = 25    # how many recent previous pages to compare against for traps/cycles
 
     def __init__(self) -> None:
         pass
@@ -56,14 +57,21 @@ class Scraper:
         # Return a list with the hyperlinks (as strings) scrapped from resp.raw_response.content
 
         # parse the url and do basic checks to confirm validity of url
-        parsed_url = urlparse(resp.url, allow_fragments=False)
-        defrag_url = urldefrag(resp.url).url
+        parsed_url = urlparse(resp.url.lower(), allow_fragments=False)
+        defrag_url = urldefrag(resp.url.lower()).url
         # perform robots.txt check first - referenced https://docs.python.org/3/library/urllib.robotparser.html for help
         try:
+            # first check if we already checked robots.txt for this domain
+            robot_url = urlunparse((parsed_url.scheme, parsed_url.netloc, "/robots.txt", "", "", ""))
+            if robot_url in Scraper.robot_allowed and not Scraper.robot_allowed[robot_url]:
+                return list()
+            # read robots.txt and save whether we are allowed to
             rfp = RobotFileParser()
-            rfp.set_url(urlunparse((parsed_url.scheme, parsed_url.netloc, "/robots.txt", "", "", "")))
+            rfp.set_url(robot_url)
             rfp.read()
-            if not rfp.can_fetch("IR US24 70346322", defrag_url):
+            robot_can_read = rfp.can_fetch("IR US24 70346322", defrag_url)
+            Scraper.robot_allowed[robot_url] = robot_can_read
+            if not robot_can_read:
                 return list()
         except:
             pass
@@ -93,20 +101,20 @@ class Scraper:
         Scraper.all_fingerprints.append(page_fingerprint)
 
         # update counting stats 
-        self.update_longest_page_and_word_count(page_words, resp.url)
+        self.update_longest_page_and_word_count(page_words, resp.url.lower())
 
         # extract urls from the page to add them to the frontier
         next_links = []
         for link in soup.find_all("a"):
-            new_url = urljoin(resp.url, link.get("href"))    # turn relative url to absolute if needed;
+            new_url = urljoin(resp.url.lower(), link.get("href"))    # turn relative url to absolute if needed;
             new_url = urldefrag(new_url).url
             if new_url and is_valid(new_url) and new_url not in Scraper.visited_pages and new_url not in Scraper.pages_in_front:
                 next_links.append(new_url)
                 Scraper.pages_in_front.add(new_url)
 
         # check for redirect, url = original url | resp.url = redirected url
-        if url != resp.url:
-            Scraper.visited_pages.add(urldefrag(url).url)
+        if url.lower() != resp.url.lower():
+            Scraper.visited_pages.add(urldefrag(url.lower()).url)
 
         return next_links
     
@@ -181,12 +189,12 @@ def is_valid(url) -> bool:
         # check if url is in the domain (https://regexr.com/ helped me figure out the right expression)
         if not re.match(r".*\.(ics|cs|informatics|stat)\.uci\.edu$", parsed.netloc):
             return False
-        if re.match(r"\/doku\.php\/.*", parsed.path):
-            return False
-        if re.match(r"\/~eppstein\/pix\/.*", parsed.path):
-            return False
-        if re.match(r".*grape\.ics\.uci\.edu.*", parsed.netloc):
-            return False
+        # if re.match(r"\/doku\.php\/.*", parsed.path):
+        #     return False
+        # if re.match(r"\/~eppstein\/pix\/.*", parsed.path):
+        #     return False
+        # if re.match(r".*grape\.ics\.uci\.edu.*", parsed.netloc):
+        #     return False
         if re.match(r".*\/pdf.*", parsed.path):
             return False
         return not re.match(
