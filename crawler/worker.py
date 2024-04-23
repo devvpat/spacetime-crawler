@@ -5,6 +5,7 @@ from utils.download import download
 from utils import get_logger
 import scraper
 import time
+from utils.response import Response
 
 
 class Worker(Thread):
@@ -24,7 +25,13 @@ class Worker(Thread):
             if not tbd_url:
                 self.logger.info("Frontier is empty. Stopping Crawler.")
                 break
-            resp = download(tbd_url, self.config, self.logger)
+            try:
+                resp = download(tbd_url, self.config, self.logger)
+            except:
+                resp = Response({
+                        "error": f"Error downloading url {tbd_url}.",
+                        "status": 503,    # 503 = service unavailable
+                        "url": tbd_url})
             self.logger.info(
                 f"Downloaded {tbd_url}, status <{resp.status}>, "
                 f"using cache {self.config.cache_server}.")

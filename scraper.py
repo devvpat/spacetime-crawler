@@ -59,7 +59,13 @@ class Scraper:
         # parse the url and do basic checks to confirm validity of url
         parsed_url = urlparse(resp.url.lower(), allow_fragments=False)
         defrag_url = urldefrag(resp.url.lower()).url
-        # perform robots.txt check first - referenced https://docs.python.org/3/library/urllib.robotparser.html for help
+
+        # verify the download request went through properply and the website itself is valid 
+        if not resp or resp.status != 200 or not resp.raw_response \
+           or defrag_url in Scraper.visited_pages or not is_valid(defrag_url):
+            return list()
+
+        # perform robots.txt check - referenced https://docs.python.org/3/library/urllib.robotparser.html for help
         try:
             # first check if we already checked robots.txt for this domain
             robot_url = urlunparse((parsed_url.scheme, parsed_url.netloc, "/robots.txt", "", "", ""))
@@ -75,9 +81,6 @@ class Scraper:
                 return list()
         except:
             pass
-        if resp.status != 200 or not resp or not resp.raw_response \
-           or defrag_url in Scraper.visited_pages or not is_valid(defrag_url):
-            return list()
         
         # after basic checks, mark the link as 'visited' and update ics subdomain tracker
         Scraper.visited_pages.add(defrag_url)
