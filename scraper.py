@@ -145,6 +145,7 @@ class Scraper:
                 file.write(f"\thttp://{key}, {value}\n")
 
     def create_fingerprint(self, words: list[str]) -> set[int]:
+        # based on procedure seen in lecture
         # create 3 grams
         three_grams = (words[i:i+3] for i in range(len(words)-2))
         # calculate hash values of 3 grams
@@ -153,7 +154,7 @@ class Scraper:
         return set(gram_hash for gram_hash in three_gram_hashes if gram_hash % 4 == 0)
 
     def fingerprints_are_similar(self, fingerprint_1: set[int], fingerprint_2: set[int]) -> bool:
-        # similarity if intersection(fingerprints) / union(fingerprints) >= threshold
+        # similar if intersection(fingerprints) / union(fingerprints) >= threshold
         intersection = fingerprint_1 & fingerprint_2
         union = fingerprint_1 | fingerprint_2
         if union:
