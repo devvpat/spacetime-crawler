@@ -66,7 +66,7 @@ class Scraper:
             return list()
 
         # check robots
-        if not self.check_robots_txt("a"):
+        if not self.check_robots_txt(resp.url.lower()):
             return list()
         
         # after basic checks, mark the link as 'visited' and update ics subdomain tracker
