@@ -72,7 +72,7 @@ class Scraper:
         # after basic checks, mark the link as 'visited' and update ics subdomain tracker
         Scraper.visited_pages.add(no_scheme_url)
         Scraper.pages_in_front.discard(no_scheme_url)
-        if re.match(r".*\.ics\.uci\.edu", parsed_url.netloc):
+        if re.match(r".*\.ics\.uci\.edu", parsed_url.netloc) or parsed_url.netloc == "ics.uci.edu":
             Scraper.ics_subdomains[parsed_url.netloc] += 1
 
         # referenced https://www.geeksforgeeks.org/beautifulsoup-scraping-link-from-html/ for bs4 usage
