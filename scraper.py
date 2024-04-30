@@ -65,22 +65,9 @@ class Scraper:
            or no_scheme_url in Scraper.visited_pages or not is_valid(defrag_url):
             return list()
 
-        # perform robots.txt check - referenced https://docs.python.org/3/library/urllib.robotparser.html for help
-        try:
-            # first check if we already checked robots.txt for this domain
-            robot_url = urlunparse((parsed_url.scheme, parsed_url.netloc, "/robots.txt", "", "", ""))
-            if robot_url in Scraper.robot_allowed and not Scraper.robot_allowed[robot_url]:
-                return list()
-            # read robots.txt and save whether we are allowed to
-            rfp = RobotFileParser()
-            rfp.set_url(robot_url)
-            rfp.read()
-            robot_can_read = rfp.can_fetch("IR US24 70346322", defrag_url)
-            Scraper.robot_allowed[robot_url] = robot_can_read
-            if not robot_can_read:
-                return list()
-        except:
-            pass
+        # check robots
+        if not self.check_robots_txt("a"):
+            return list()
         
         # after basic checks, mark the link as 'visited' and update ics subdomain tracker
         Scraper.visited_pages.add(no_scheme_url)
@@ -113,7 +100,9 @@ class Scraper:
             new_url = urldefrag(new_url).url
             new_parsed_url = urlparse(new_url, allow_fragments=False)
             new_no_scheme_url = new_parsed_url.netloc + urlunparse(("", "", new_parsed_url.path, new_parsed_url.params, new_parsed_url.query, ""))
-            if new_url and is_valid(new_url) and new_no_scheme_url not in Scraper.visited_pages and new_no_scheme_url not in Scraper.pages_in_front:
+            if new_url and is_valid(new_url) and self.check_robots_txt(new_url) \
+               and new_no_scheme_url not in Scraper.visited_pages \
+               and new_no_scheme_url not in Scraper.pages_in_front:
                 next_links.append(new_url)
                 Scraper.pages_in_front.add(new_no_scheme_url)
 
@@ -184,6 +173,29 @@ class Scraper:
             if self.fingerprints_are_similar(fingerprint, Scraper.all_fingerprints[i]):
                 return True
         return False
+
+    def check_robots_txt(self, url: str) -> bool:
+        # returns whether the crawling can crawl the website
+        # determined by checking robots.txt
+        # perform robots.txt check - referenced https://docs.python.org/3/library/urllib.robotparser.html for help
+        defrag_url = urldefrag(url.lower())
+        parsed_url = urlparse(defrag_url, allow_fragments=False)
+        try:
+            # first check if we already checked robots.txt for this domain
+            robot_url = urlunparse((parsed_url.scheme, parsed_url.netloc, "/robots.txt", "", "", ""))
+            if robot_url in Scraper.robot_allowed and not Scraper.robot_allowed[robot_url]:
+                return False
+            # read robots.txt and save whether we are allowed to
+            rfp = RobotFileParser()
+            rfp.set_url(robot_url)
+            rfp.read()
+            robot_can_read = rfp.can_fetch("IR US24 70346322", defrag_url)
+            Scraper.robot_allowed[robot_url] = robot_can_read
+            if not robot_can_read:
+                return False
+        except Exception:
+            pass
+        return True
 
 
 def is_valid(url) -> bool:
