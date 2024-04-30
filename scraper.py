@@ -61,7 +61,7 @@ class Scraper:
         parsed_url = urlparse(defrag_url, allow_fragments=False)
         no_scheme_url = parsed_url.netloc + urlunparse(("", "", parsed_url.path, parsed_url.params, parsed_url.query, ""))
         # verify the download request went through properply and the website itself is valid 
-        if not resp or resp.status != 200 or not resp.raw_response \
+        if not resp or resp.status not in [200, 301, 302, 307, 308] or not resp.raw_response \
            or no_scheme_url in Scraper.visited_pages or not is_valid(defrag_url):
             return list()
 
@@ -178,9 +178,9 @@ class Scraper:
         # returns whether the crawling can crawl the website
         # determined by checking robots.txt
         # perform robots.txt check - referenced https://docs.python.org/3/library/urllib.robotparser.html for help
-        defrag_url = urldefrag(url.lower())
-        parsed_url = urlparse(defrag_url, allow_fragments=False)
         try:
+            defrag_url = urldefrag(url.lower())
+            parsed_url = urlparse(defrag_url, allow_fragments=False)
             # first check if we already checked robots.txt for this domain
             robot_url = urlunparse((parsed_url.scheme, parsed_url.netloc, "/robots.txt", "", "", ""))
             if robot_url in Scraper.robot_allowed and not Scraper.robot_allowed[robot_url]:
