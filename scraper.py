@@ -7,6 +7,7 @@ from collections import defaultdict
 
 class Scraper:
     visited_pages: set[str] = set()    # set of all unique urls visited
+    num_redirect: int = 0    # number of urls visited that redirected
     pages_in_front: set[str] = set()    # pages that are in frontier, in a set for O(1) lookup
     longest_page: tuple[str, int] = ("", -1)    # (url, num words)
     word_count: defaultdict[str, int] = defaultdict(int)    # dict[word] = count
@@ -112,6 +113,7 @@ class Scraper:
             old_parsed_url = urlparse(old_url_defrag, allow_fragments=False)
             old_no_scheme_url = old_parsed_url.netloc + urlunparse(("", "", old_parsed_url.path, old_parsed_url.params, old_parsed_url.query, ""))
             Scraper.visited_pages.add(old_no_scheme_url)
+            Scraper.num_redirect += 1
 
         return next_links
     
@@ -134,7 +136,7 @@ class Scraper:
         with open(filename, "w") as file:
             file.write("CS 121/INF 141 - Assignment 2: Web Crawler - Crawl Summary\n")
             file.write("IR US24 70346322\n\n")
-            file.write(f"Total unique pages found = {len(Scraper.visited_pages)}\n\n")
+            file.write(f"Total unique pages found = {len(Scraper.visited_pages) - Scraper.num_redirect}\n\n")
             file.write(f"Longest page = {Scraper.longest_page[0]} with {Scraper.longest_page[1]} words\n\n")
             file.write(f"Top 50 most common words (excluding stop words):\n")
             for key, value in (sorted(Scraper.word_count.items(), key=lambda item: item[1]))[:50]:
@@ -196,6 +198,8 @@ class Scraper:
                 return False
         except Exception:
             pass
+        except:
+            return False
         return True
 
 
@@ -216,7 +220,9 @@ def is_valid(url) -> bool:
         #     return False
         # if re.match(r".*grape\.ics\.uci\.edu.*", parsed.netloc):
         #     return False
-        if re.match(r".*\/pdf.*", parsed.path):
+        if re.match(r".*\/pdf.*", parsed.path):    # ignore pdfs
+            return False
+        if "diff" in parsed.query and "rev" in parsed.query:    # ignore repository revisions (specifically on doku.php)
             return False
         return not re.match(
             r".*\.(css|js|bmp|gif|jpe?g|ico"
@@ -227,7 +233,7 @@ def is_valid(url) -> bool:
             + r"|epub|dll|cnf|tgz|sha1"
             + r"|thmx|mso|arff|rtf|jar|csv"
             + r"|rm|smil|wmv|swf|wma|zip|rar|gz"
-            + r"|java|war|jar"
+            + r"|java|war|jar|mpg|ppsx"
             + r"|pdf|ppt|pptx|doc|docx|css|js)$", parsed.path.lower())
 
     except TypeError:
